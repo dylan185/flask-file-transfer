@@ -1,2 +1,2 @@
 # flask-file-transfer
-Server to transfer files using Flask &amp; HTML/CSS
+Web Server to transfer files using Flask &amp; HTML/CSS

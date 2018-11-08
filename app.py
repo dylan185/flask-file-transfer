@@ -31,7 +31,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # SQL Alchemy setup
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:dylan185@localhost/SPFlaskWebServer1'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/SPFlaskWebServer1'
 db = SQLAlchemy(app)
 
 # Initialize

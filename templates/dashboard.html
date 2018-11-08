@@ -1,5 +1,18 @@
 {% extends 'layout.html' %}
 
 {% block body %}
-    <h1>Dashboard <small> Welcome {{session.username}}</small></h1>
+    <h1>Dashboard <small> Welcome to {{session.groupname}} channel</small></h1>
+    <a class="btn btn-success" href="/upload_file">Upload File</a>
+    <a class="btn btn-primary" href="/create_group">Create Group</a>
+    <hr>
+    <table class="table table-striped">
+        <tr>
+            <th>File Name</th>
+            <th>Uploader</th>
+            <th>Description</th>
+        </tr>
+        {% for file in uploads %}
+
+        {% endfor %}
+    </table>
 {% endblock %}

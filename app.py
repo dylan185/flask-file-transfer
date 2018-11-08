@@ -263,6 +263,11 @@ def upload_file():
 
         # Add to DB
         new_file = File(file_name=file_name, file_desc=file_desc, file_path='uploads/%s'%file_name, user=user, group=group)
+        db.session.add(new_file)
+        db.session.commit()
+
+        flash('File Uploaded!')
+        return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':
     app.secret_key = 'V8EVmF*RfdV!TX055eBI'

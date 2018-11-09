@@ -1,18 +1,29 @@
 {% extends 'layout.html' %}
 
 {% block body %}
-    <h1>Dashboard <small> Welcome to {{session.groupname}} channel</small></h1>
+    <h1>Dashboard <small> Welcome{% if session.groupname %}to the {{session.groupname}}{% else %} the {% endif %} channel</small></h1>
     <a class="btn btn-success" href="/upload_file">Upload File</a>
     <a class="btn btn-primary" href="/create_group">Create Group</a>
+    {% if session.in_group %}
+    <a class="btn btn-info" href="/upload_file">Upload File</a>
+    {% endif %}
     <hr>
+    {% if session.in_group %}
     <table class="table table-striped">
         <tr>
             <th>File Name</th>
+            <th>Upload Date</th>
             <th>Uploader</th>
-            <th>Description</th>
         </tr>
         {% for file in uploads %}
-
+        <tr>
+            <td>{{ file.file_name }}</td>
+            <td>{{ file.upload_date }}</td>
+            <td>{{ file.uploader}}</td>
+            <td></td>
+        </tr>
         {% endfor %}
     </table>
+    {% endif %}
+
 {% endblock %}

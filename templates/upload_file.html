@@ -1,0 +1,19 @@
+{% extends 'layout.html'%}
+
+{% block body %}
+    <h1>Upload File</h1>
+    {% from "includes/_formhelpers.html" import render_field %}
+    <form method="POST" action="">
+        {{ form.csrf_token }}
+        <div class="form-group">
+        {{render_field(form.file_name, class_="form-control")}}
+        </div>
+        <div class="form-group">
+        {{render_field(form.file_desc, class_="form-control")}}
+        </div>
+        <div class="form-group" enctype="multipart/form-data">
+        {{render_field(form.upload, class_="form-control")}}
+        </div>
+        <input type="submit" class="btn btn-primary" value="Submit">
+    </form>
+{% endblock %}

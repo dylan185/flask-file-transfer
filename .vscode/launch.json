@@ -60,5 +60,12 @@
             "program": "${file}",
             "console": "externalTerminal"
         }
+        {
+            "name": "Python: Current File Custom",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "console": "integratedTerminal"
+        }
     ]
 }

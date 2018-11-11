@@ -1,0 +1,29 @@
+{% extends 'layout.html' %}
+
+{% block body %}
+    <h1>View Statuses</h1>
+    <hr>
+    {% if session.is_admin %}
+    <table class="table table-striped">
+        <tr>
+            <th>Status</th>
+            <th>User</th>
+            <th>Type</th>
+        </tr>
+        {% for status in statuses %}
+        <tr>
+            <td>{{ status.status_id }}</td>
+            <td>{{ status.user.username }}</td>
+            <td>{{ status.status_type }}</td>
+            <td>
+                <a class="btn btn-success" href="/approve/{{status.status_id}}">Approve</a>
+            </td>
+            <td>
+                <a class="btn btn-warning" href="/decline/{{status.status_id}}">Decline</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+{% endblock %}

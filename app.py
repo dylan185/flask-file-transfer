@@ -9,7 +9,7 @@ import datetime
 import collections
 from flask import Flask, render_template, request, flash, redirect, url_for, session, logging
 from flask_mysqldb import MySQL
-from wtforms import Form, SelectField, StringField, TextAreaField, PasswordField, validators
+from wtforms import Form, SelectField, StringField, TextAreaField, PasswordField, BooleanField,validators
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired
 from passlib.hash import sha256_crypt
@@ -49,6 +49,39 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# Check if user is logged in
+def is_logged_in(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if 'logged_in' in session:
+            return f(*args, **kwargs)
+        else:
+            flash('Unauthorized, Please login.', 'danger')
+            return redirect(url_for('login'))
+    return wrap
+
+# Check if user is in group
+def is_in_group(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if 'in_group' in session:
+            return f(*args, **kwargs)
+        else:
+            flash('Unauthorized, Please join group.', 'danger')
+            return redirect(url_for('dashboard'))
+    return wrap
+
+# Checks if user is admin
+def is_admin(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if 'is_admin' in session:
+            return f(*args, **kwargs)
+        else:
+            flash('Unauthorized.', 'danger')
+            return redirect(url_for('dashboard'))
+    return wrap
+
 ##########
 # MODELS #
 ##########
@@ -62,6 +95,7 @@ class Group(db.Model):
     # Relationships
     users = db.relationship('User', back_populates='group')
     files = db.relationship('File', back_populates='group')
+    group_status = db.relationship('Status', back_populates='group')
 
     def __repr__(self):
         return '<Group %r>' % self.groupname
@@ -74,11 +108,13 @@ class User(db.Model):
     email = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(100), nullable=False)
     register_date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    admin_status = db.Column(db.Boolean, nullable=False, default=False)
     
     # Foreign Keys & Relationships
     group_id = db.Column(db.Integer, db.ForeignKey('group.group_id'), nullable=True)
     group = db.relationship('Group', back_populates='users')
     files = db.relationship('File', back_populates='user')
+    user_status = db.relationship('Status', back_populates='user')
 
     def __repr__(self):
         return '<User %r>' % self.username
@@ -100,6 +136,22 @@ class File(db.Model):
 
     def __repr__(self):
         return '<File %r>' % self.file_name
+
+class Status(db.Model):
+    __tablename__ = 'status'
+    status_id = db.Column(db.Integer, primary_key=True)
+    status_type = db.Column(db.String(20), nullable=False)
+    approved = db.Column(db.Boolean, nullable=False, default=False)
+    username = db.Column(db.String(100), nullable=True)
+
+    # Foreign Keys & Relationships
+    group_id = db.Column(db.Integer, db.ForeignKey('group.group_id'), nullable=True)
+    group = db.relationship('Group', back_populates='group_status')
+    user_id = db.Column(db.Integer, db.ForeignKey('user.user_id'), nullable=False)
+    user = db.relationship('User', back_populates='user_status')
+    
+    def __repr__(self):
+        return '<Status %r>' % self.status_id
 
 ##############
 # HTML PAGES #
@@ -139,6 +191,7 @@ class RegisterForm(Form):
     groupnames = SelectField('Group', coerce=int, validators=[
         validators.Optional()
     ])
+    admin = BooleanField('Admin')
 
 # User Registration
 @app.route('/register', methods=['GET', 'POST'])
@@ -151,13 +204,23 @@ def register():
         username = form.username.data
         password = sha256_crypt.encrypt(str(form.password.data))
         groupname = form.groupnames.data
+        admin = form.admin.data
 
         # Get group
         group = Group.query.filter_by(groupname=groupname).first()
 
         # create object
-        new_user = User(name=name, email=email, username=username, password=password, group=group)
+        new_user = User(name=name, email=email, username=username, password=password)
         db.session.add(new_user)
+
+        # Add group request and admin(if any) to status
+        new_group_status = Status(status_type='group', user=new_user, group=group, username=username)
+        db.session.add(new_group_status)
+        
+        if admin:
+            new_admin_status = Status(status_type='admin', user=new_user, username=username)
+            db.session.add(new_admin_status)
+
         db.session.commit()
 
         flash('You are now registered and can log in.', 'success')
@@ -183,6 +246,8 @@ def login():
                 session['in_group'] = True
                 if user.group:
                     session['groupname'] = user.group.groupname
+                if user.admin_status:
+                    session['is_admin'] = True
                 flash('Logged in', 'success')
                 return redirect(url_for('dashboard'))
             else:
@@ -193,28 +258,6 @@ def login():
             return render_template('login.html', error=error)
 
     return render_template('login.html')
-
-# Check if user is logged in
-def is_logged_in(f):
-    @wraps(f)
-    def wrap(*args, **kwargs):
-        if 'logged_in' in session:
-            return f(*args, **kwargs)
-        else:
-            flash('Unauthorized, Please login.', 'danger')
-            return redirect(url_for('login'))
-    return wrap
-
-# Check if user is in group
-def is_in_group(f):
-    @wraps(f)
-    def wrap(*args, **kwargs):
-        if 'in_group' in session:
-            return f(*args, **kwargs)
-        else:
-            flash('Unauthorized, Please join group.', 'danger')
-            return redirect(url_for('dashboard'))
-    return wrap
 
 # Logout
 @app.route('/logout')
@@ -233,6 +276,7 @@ class GroupForm(Form):
 # Create Group
 @app.route('/create_group', methods=['GET', 'POST'])
 @is_logged_in
+@is_admin
 def create_group():
     form = GroupForm(request.form)
     if request.method == 'POST' and form.validate():
@@ -252,6 +296,8 @@ def create_group():
 @app.route('/dashboard')
 @is_logged_in
 def dashboard():
+    # if session.get('username'):
+        # session['is_admin'] = True 
     return render_template('dashboard.html', uploads=File.query.all())
 
 # Upload File Form
@@ -297,6 +343,43 @@ def upload_file():
         flash('File Uploaded!')
         return redirect(url_for('dashboard'))
     return render_template('upload_file.html', form=form)
+
+# View Statuses
+@app.route('/view_status', methods=['GET', 'POST'])
+@is_logged_in
+@is_admin
+def view_status():
+    return render_template('view_status.html', statuses=Status.query.all())
+
+# Approve Status
+@app.route('/approve/<string:id>/')
+@is_logged_in
+@is_admin
+def approval(id):
+    status = Status.query.filter_by(status_id=int(id)).first()
+    if status.status_type == 'admin':
+        status.user.admin_status = True
+        db.session.delete(status)
+        db.session.commit()
+        flash('Admin Status Approved!', 'success')
+    if status.status_type == 'group':
+        user = status.user
+        user.group = status.group
+        db.session.delete(status)
+        db.session.commit()
+        flash('Group Status Approved!', 'success')
+    return redirect(url_for('view_status'))
+
+# Decline Status
+@app.route('/decline/<string:id>/')
+@is_logged_in
+@is_admin
+def decline(id):
+    status = Status.query.filter_by(status_id=int(id)).first()
+    db.session.delete(status)
+    db.session.commit()
+    flash('Declined Status.', 'success')
+    return redirect(url_for('view_status'))
 
 if __name__ == '__main__':
     app.secret_key = 'V8EVmF*RfdV!TX055eBI'

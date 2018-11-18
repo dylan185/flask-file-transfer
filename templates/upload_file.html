@@ -3,17 +3,22 @@
 {% block body %}
     <h1>Upload File</h1>
     {% from "includes/_formhelpers.html" import render_field %}
-    <form method="POST" action="">
-        {{ form.csrf_token }}
+    <form method="POST" action="" enctype="multipart/form-data">
+        {{ form.hidden_tag() }}
+        <fieldset class="form-group">
+            <div class="form-group">
+                {{render_field(form.file_name, class_="form-control")}}
+            </div>
+            <div class="form-group">
+                {{render_field(form.file_desc, class_="form-control")}}
+            </div>
+            <div class="form-group">
+                {{ form.upload.label() }}
+                {{ form.upload(class="form-control-file") }}
+            </div>
+        </fieldset>
         <div class="form-group">
-        {{render_field(form.file_name, class_="form-control")}}
+            {{ form.submit(class="btn btn-outline-info") }}
         </div>
-        <div class="form-group">
-        {{render_field(form.file_desc, class_="form-control")}}
-        </div>
-        <div class="form-group" enctype="multipart/form-data">
-        {{render_field(form.upload, class_="form-control")}}
-        </div>
-        <input type="submit" class="btn btn-primary" value="Submit">
     </form>
 {% endblock %}

@@ -9,20 +9,21 @@ import datetime
 import collections
 from flask import Flask, render_template, request, flash, redirect, url_for, session, logging
 from flask_mysqldb import MySQL
-from wtforms import Form, SelectField, StringField, TextAreaField, PasswordField, BooleanField,validators
+from wtforms import Form, SelectField, StringField, TextAreaField, PasswordField, BooleanField, SubmitField, validators
 from flask_wtf import FlaskForm
-from flask_wtf.file import FileField, FileRequired
+from flask_wtf.file import FileField, FileRequired, FileAllowed
 from passlib.hash import sha256_crypt
 from functools import wraps
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import CombinedMultiDict
 from flask_sqlalchemy import SQLAlchemy
+from PIL import Image
 
 app = Flask(__name__)
 
 # Set Upload Location
 UPLOAD_FOLDER = '/uploads'
-ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt'])
+# ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt'])
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # SQL Alchemy DB setup
@@ -45,9 +46,9 @@ group_reg = '^[A-Za-z0-9 @ -_?!]*$'
 ####################
 
 # Checks Whitelist and compares file type
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# def allowed_file(filename):
+#     return '.' in filename and \
+#            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Check if user is logged in
 def is_logged_in(f):
@@ -153,19 +154,9 @@ class Status(db.Model):
     def __repr__(self):
         return '<Status %r>' % self.status_id
 
-##############
-# HTML PAGES #
-##############
-
-# Index
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-# About
-@app.route('/about')
-def about():
-    return render_template('about.html')
+#########
+# FORMS #
+#########
 
 # User Registration Form
 class RegisterForm(Form):
@@ -193,21 +184,77 @@ class RegisterForm(Form):
     ])
     admin = BooleanField('Admin')
 
+    def validate_username(self, username):
+        user = User.query.filter_by(username=username.data).first()
+        if user:
+            raise validators.ValidationError('That username is taken. Please choose a different one.')
+
+    def validate_email(self, email):
+        user = User.query.filter_by(email=email.data).first()
+        if user:
+            raise validators.ValidationError('That email is taken. Please choose a different one.')
+
+# Group Creation Form
+class GroupForm(Form):
+    groupname = StringField('Group Name', [
+        validators.Length(min=4, max=35, message="Group Name must be between 4 & 35 characters."),
+        validators.Regexp(regex=group_reg, message="Group Name must contain only letters, numbers and spaces.")
+        ])
+
+# Upload File Form
+class UploadFileForm(FlaskForm):
+    file_name = StringField('File Title', [
+        validators.Length(min=4, max=35, message="File Title must be between 4 & 35 characters."),
+        validators.Regexp(username_reg, message="File Title can contain only letters, numbers or underscores.")
+    ])
+    file_desc = TextAreaField('Body', [
+        validators.Length(max=500),
+        validators.Regexp(group_reg, message="The description can only contain letters, numbers, underscores, dashes, exclaimation/question marks, or periods."),
+        validators.Optional()
+    ])
+    upload = FileField('File', validators=[FileAllowed(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt'], 'Invalid File Type. Must be .txt, .pdf, .png, .jpeg')])
+    submit = SubmitField('Post')
+
+# class UpdateAccountForm(FlaskForm):
+#     username = StringField('Username',
+#                            validators=[DataRequired(), Length(min=2, max=20)])
+#     email = StringField('Email',
+#                         validators=[DataRequired(), Email()])
+#     picture = FileField('Update Profile Picture', validators=[FileAllowed(['jpg', 'png'])])
+#     submit = SubmitField('Update')
+
+##############
+# HTML PAGES #
+##############
+
+# Index
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# About
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
 # User Registration
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm(request.form)
     form.groupnames.choices = [(g.group_id, g.groupname) for g in Group.query.order_by('groupname')]
     if request.method == 'POST' and form.validate():
+        # Get list of groups for selection
+        groups = Group.query.all()
+
         name = form.name.data
         email = form.email.data
         username = form.username.data
         password = sha256_crypt.encrypt(str(form.password.data))
-        groupname = form.groupnames.data
+        selection = form.groupnames.data
         admin = form.admin.data
 
         # Get group
-        group = Group.query.filter_by(groupname=groupname).first()
+        group = groups[selection]
 
         # create object
         new_user = User(name=name, email=email, username=username, password=password)
@@ -243,8 +290,8 @@ def login():
             if sha256_crypt.verify(password_attempt, user.password):
                 session['logged_in'] = True
                 session['username'] = username
-                session['in_group'] = True
                 if user.group:
+                    session['in_group'] = True
                     session['groupname'] = user.group.groupname
                 if user.admin_status:
                     session['is_admin'] = True
@@ -265,13 +312,6 @@ def logout():
     session.clear()
     flash('You are logged out.', 'success')
     return redirect(url_for('login'))
-
-# Group Creation Form
-class GroupForm(Form):
-    groupname = StringField('Group Name', [
-        validators.Length(min=4, max=35, message="Group Name must be between 4 & 35 characters."),
-        validators.Regexp(regex=group_reg, message="Group Name must contain only letters, numbers and spaces.")
-        ])
 
 # Create Group
 @app.route('/create_group', methods=['GET', 'POST'])
@@ -300,18 +340,21 @@ def dashboard():
         # session['is_admin'] = True 
     return render_template('dashboard.html', uploads=File.query.all())
 
-# Upload File Form
-class UploadFileForm(FlaskForm):
-    file_name = StringField('File Title', [
-        validators.Length(min=4, max=35, message="File Title must be between 4 & 35 characters."),
-        validators.Regexp(username_reg, message="File Title can contain only letters, numbers or underscores.")
-    ])
-    file_desc = TextAreaField('Body', [
-        validators.Length(max=500),
-        validators.Regexp(group_reg, message="The description can only contain letters, numbers, underscores, dashes, exclaimation/question marks, or periods."),
-        validators.Optional()
-    ])
-    upload = FileField('File', validators=[FileRequired()])
+
+def save_picture(form_picture):
+    # random_hex = secrets.token_hex(8)
+    # _, f_ext = os.path.splitext(form_picture.filename)
+    # picture_fn = random_hex + f_ext
+    file_name = secure_filename(form_picture.filename)
+    picture_path = os.path.join(app.root_path, 'static/uploads', file_name)
+
+    output_size = (125, 125)
+    i = Image.open(form_picture)
+    i.thumbnail(output_size)
+    i.save(picture_path)
+
+    return file_name
+
 
 # Upload File
 @app.route('/upload_file', methods=['GET', 'POST'])
@@ -319,24 +362,34 @@ class UploadFileForm(FlaskForm):
 @is_in_group
 def upload_file():
     form = UploadFileForm()
-    # if request.method == 'POST' and form.validate() and allowed_file(form.file.data):
     print(form.validate_on_submit())
     print(form.errors)
-    if form.validate_on_submit(): 
+    if form.validate_on_submit():
         print('========================')
-        # file_name = secure_filename(form.file.data)
+        # file_name = secure_filename(form.upload.data)
+        # print(form.upload)
+        # file_name = "testfile"
+        # file_desc = "test desc"
         file_name = form.file_name.data
         file_desc = form.file_desc.data
-        file_path = join(app.config['UPLOAD_FOLDER'], secure_filename(form.upload.data.filename))
+        # import_file = request.files['inputFile']
+        # file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(form.upload.data.filename))
         # open(os.path.join(app.config['UPLOAD_FOLDER'], file_name), 'w').write()
-        form.upload.data.save(file_path)
+        # form.upload.data.save(file_path)
+        # import_file.save(file_path)
 
         # Get user and group
         user = User.query.filter_by(username=session.get('username')).first()
         group = Group.query.filter_by(groupname=session.get('groupname')).first()
 
+        print(user, group)
+
+        if form.upload.data:
+            print(form.upload.data)
+            upload_file = save_picture(form.upload.data)
+
         # Add to DB
-        new_file = File(file_name=file_name, file_desc=file_desc, file_path=file_path, uploader=user.username, user=user, group=group)
+        new_file = File(file_name=file_name, file_desc=file_desc, file_path=upload_file, uploader=user.username, user=user, group=group)
         db.session.add(new_file)
         db.session.commit()
 
@@ -380,6 +433,8 @@ def decline(id):
     db.session.commit()
     flash('Declined Status.', 'success')
     return redirect(url_for('view_status'))
+
+# View Specified Upload
 
 if __name__ == '__main__':
     app.secret_key = 'V8EVmF*RfdV!TX055eBI'

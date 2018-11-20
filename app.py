@@ -7,7 +7,7 @@
 import os
 import datetime
 import collections
-from flask import Flask, render_template, request, flash, redirect, url_for, session, logging
+from flask import Flask, render_template, request, flash, redirect, url_for, session, logging, send_from_directory
 from flask_mysqldb import MySQL
 from wtforms import Form, SelectField, StringField, TextAreaField, PasswordField, BooleanField, SubmitField, validators
 from flask_wtf import FlaskForm
@@ -83,6 +83,21 @@ def is_admin(f):
             return redirect(url_for('dashboard'))
     return wrap
 
+# Saves Picture
+def save_picture(form_picture):
+    # random_hex = secrets.token_hex(8)
+    # _, f_ext = os.path.splitext(form_picture.filename)
+    # picture_fn = random_hex + f_ext
+    file_name = secure_filename(form_picture.filename)
+    picture_path = os.path.join(app.root_path, 'static/uploads', file_name)
+
+    output_size = (125, 125)
+    i = Image.open(form_picture)
+    i.thumbnail(output_size)
+    i.save(picture_path)
+
+    return file_name
+
 ##########
 # MODELS #
 ##########
@@ -125,6 +140,7 @@ class File(db.Model):
     file_id = db.Column(db.Integer, primary_key=True)
     file_name = db.Column(db.String(80), unique=True, nullable=False)
     file_desc = db.Column(db.Text())
+    fn = db.Column(db.String(100), nullable=False)
     file_path = db.Column(db.String(100), nullable=False)
     uploader = db.Column(db.String(100), nullable=False)
     upload_date = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
@@ -215,13 +231,6 @@ class UploadFileForm(FlaskForm):
     upload = FileField('File', validators=[FileAllowed(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt'], 'Invalid File Type. Must be .txt, .pdf, .png, .jpeg')])
     submit = SubmitField('Post')
 
-# class UpdateAccountForm(FlaskForm):
-#     username = StringField('Username',
-#                            validators=[DataRequired(), Length(min=2, max=20)])
-#     email = StringField('Email',
-#                         validators=[DataRequired(), Email()])
-#     picture = FileField('Update Profile Picture', validators=[FileAllowed(['jpg', 'png'])])
-#     submit = SubmitField('Update')
 
 ##############
 # HTML PAGES #
@@ -340,56 +349,29 @@ def dashboard():
         # session['is_admin'] = True 
     return render_template('dashboard.html', uploads=File.query.all())
 
-
-def save_picture(form_picture):
-    # random_hex = secrets.token_hex(8)
-    # _, f_ext = os.path.splitext(form_picture.filename)
-    # picture_fn = random_hex + f_ext
-    file_name = secure_filename(form_picture.filename)
-    picture_path = os.path.join(app.root_path, 'static/uploads', file_name)
-
-    output_size = (125, 125)
-    i = Image.open(form_picture)
-    i.thumbnail(output_size)
-    i.save(picture_path)
-
-    return file_name
-
-
 # Upload File
 @app.route('/upload_file', methods=['GET', 'POST'])
 @is_logged_in
 @is_in_group
 def upload_file():
     form = UploadFileForm()
-    print(form.validate_on_submit())
-    print(form.errors)
+    # print(form.validate_on_submit())
+    # print(form.errors)
     if form.validate_on_submit():
-        print('========================')
-        # file_name = secure_filename(form.upload.data)
-        # print(form.upload)
-        # file_name = "testfile"
-        # file_desc = "test desc"
+        # print('========================')
         file_name = form.file_name.data
         file_desc = form.file_desc.data
-        # import_file = request.files['inputFile']
-        # file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(form.upload.data.filename))
-        # open(os.path.join(app.config['UPLOAD_FOLDER'], file_name), 'w').write()
-        # form.upload.data.save(file_path)
-        # import_file.save(file_path)
 
         # Get user and group
         user = User.query.filter_by(username=session.get('username')).first()
         group = Group.query.filter_by(groupname=session.get('groupname')).first()
 
-        print(user, group)
-
-        if form.upload.data:
-            print(form.upload.data)
-            upload_file = save_picture(form.upload.data)
+        # upload_file = save_picture(form.upload.data)
+        f_name = secure_filename(form.upload.data.filename)
+        file_path = os.path.join(app.root_path, 'static/uploads', f_name)
 
         # Add to DB
-        new_file = File(file_name=file_name, file_desc=file_desc, file_path=upload_file, uploader=user.username, user=user, group=group)
+        new_file = File(fn=f_name ,file_name=file_name, file_desc=file_desc, file_path=file_path, uploader=user.username, user=user, group=group)
         db.session.add(new_file)
         db.session.commit()
 
@@ -435,6 +417,20 @@ def decline(id):
     return redirect(url_for('view_status'))
 
 # View Specified Upload
+@app.route('/download_file/<string:filename>/', methods=['GET', 'POST'])
+@is_logged_in
+@is_in_group
+def download_file(filename):
+    # return render_template('view_file.html', file=File.query.filter_by(file_name=filename).first())
+    f = File.query.filter_by(file_name=filename).first()
+    path = os.path.join(app.root_path, 'static/uploads')
+    print("============================================")
+    print(path, f.file_name)
+    print(f.file_path)
+    try:
+        return send_from_directory(path, f.fn)
+    except Exception as error:
+        return str(error)
 
 if __name__ == '__main__':
     app.secret_key = 'V8EVmF*RfdV!TX055eBI'

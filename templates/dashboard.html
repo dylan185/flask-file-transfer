@@ -2,7 +2,6 @@
 
 {% block body %}
     <h1>Dashboard <small> Welcome{% if session.groupname %}to the {{session.groupname}}{% else %} the {% endif %} channel</small></h1>
-    <a class="btn btn-success" href="/upload_file">Upload File</a>
     {% if session.is_admin %}
     <a class="btn btn-primary" href="/create_group">Create Group</a>
     <a class="btn btn-warning" href="/view_status">View Statuses</a>
@@ -20,7 +19,7 @@
         </tr>
         {% for file in uploads %}
         <tr>
-            <td>{{ file.file_name }}</td>
+            <td><a href="{{ url_for('download_file', filename=file.file_name) }}">{{ file.file_name }}</a></td>
             <td>{{ file.upload_date }}</td>
             <td>{{ file.uploader}}</td>
             <td></td>
